@@ -1,5 +1,6 @@
 #  coding: utf-8 
 import socketserver
+from os import error, listdir, path
 
 # Copyright 2013 Abram Hindle, Eddie Antonio Santos
 # 
@@ -26,13 +27,75 @@ import socketserver
 
 # try: curl -v -X GET http://127.0.0.1:8080/
 
+def detectType(content_type, self):
+    if content_type == "css":
+        self.request.sendall(bytearray("Content-Type: text/css\r\n",'utf-8'))
+    else:
+        self.request.sendall(bytearray("Content-Type: text/html\r\n",'utf-8'))
+
+
+
+def constructResponse(self):
+    content_type = ""
+    path, content_type= parseRequest(self,content_type)
+    self.request.sendall(bytearray("HTTP/1.1 200 OK\r\n",'utf-8'))
+    detectType(content_type, self)
+    #to do detect which file to send
+    self.request.sendall(bytearray("\r\n",'utf-8'))
+    sendFile(self,path)
+
+def parseRequest(self,content_type):
+    path = ""
+    content = ""
+    request = self.data.decode("utf-8")
+    split_request = request.split()
+    file_path = split_request[1]
+    split_path = file_path.split("/")
+
+    if ((split_path[-1][-4:] == "html") or (split_path[-1][-4:] == ".css")):
+        content = split_path.pop()
+        if content[-4:] == "html":
+            content_type = "html"
+        elif content[-4:] == ".css":
+            content_type = "css"
+
+    print(file_path)
+    print(split_path)
+
+    for i in split_path:
+        if i != "":
+            path = path+ "/"+ i
+            if path[0] == "/":
+                path = path[1:]
+                path = "www/" + path
+            try:
+                files_in_dir = listdir(path)
+                print(files_in_dir)
+            except error as e:
+                self.request.sendall(bytearray("HTTP/1.1 404 Not Found\r\n",'utf-8'))
+        elif file_path =="/" or file_path =="/index.html" or file_path =="/base.css":
+            path = "www"
+            files_in_dir = listdir(path)
+            break
+    if content in files_in_dir:
+        return path+"/"+content, content_type
+    else: return path, content
+
+
+def sendFile(self, file_to_send):
+    if ((file_to_send[-4:] == "html") or (file_to_send[-4:] == ".css")):
+        file_to_send = file_to_send
+    else:
+        file_to_send = file_to_send + "/index.html"
+    f = open(file_to_send, "r")
+    self.request.sendall(bytearray(f.read(),'utf-8'))
 
 class MyWebServer(socketserver.BaseRequestHandler):
     
     def handle(self):
         self.data = self.request.recv(1024).strip()
         print ("Got a request of: %s\n" % self.data)
-        self.request.sendall(bytearray("OK",'utf-8'))
+        constructResponse(self)
 
 if __name__ == "__main__":
     HOST, PORT = "localhost", 8080
